@@ -22,6 +22,19 @@ Your final app should:
 - Display the plan clearly (and ideally explain the reasoning)
 - Include tests for the most important scheduling behaviors
 
+## Implementation summary
+
+The backend in `pawpal_system.py` uses four dataclasses. `Task` describes a care
+activity and tracks completion. `Pet` manages its tasks, and `Owner.get_all_tasks()`
+combines tasks from all of the owner's pets. `Scheduler` calls that method,
+filters completed tasks, and selects activities by priority and preferences
+within one shared daily time budget. It also explains selected and skipped tasks.
+
+`main.py` demonstrates the system with two pets and readable terminal output.
+The tests cover basic task actions and multi-pet scheduling. Frequency is stored
+as descriptive text; automatic recurrence and the Streamlit backend integration
+are future work.
+
 ## Getting started
 
 ### Setup
@@ -42,32 +55,49 @@ pip install -r requirements.txt
 6. Connect your logic to the Streamlit UI in `app.py`.
 7. Refine UML so it matches what you actually built.
 
-## 🖥️ Sample Output
+## Sample Output
 
-Paste a sample of your app's CLI or Streamlit output here so a reader can see what a generated plan looks like:
+Run the terminal demo with your virtual environment active:
 
+```bash
+python main.py
 ```
-# e.g.:
-# Daily plan for Biscuit (Golden Retriever):
-#   08:00 — Morning walk (30 min) [priority: high]
-#   09:00 — Feeding (10 min) [priority: high]
-#   ...
+
+Actual output from the two-pet demo:
+
+```text
+Today's Schedule
+Owner: Jordan | Available time: 40 min
+Pets: Mochi (dog), Luna (cat)
+
+1. Mochi: Morning walk | 20 min | high priority
+2. Luna: Breakfast | 5 min | high priority
+3. Luna: Play session | 10 min | medium priority
+
+Total scheduled: 35 / 40 min
+Time remaining: 5 min
+
+Skipped (not enough time):
+- Mochi: Brush coat | 15 min | low priority
 ```
 
 ## 🧪 Testing PawPal+
 
 ```bash
 # Run the full test suite:
-pytest
+python -m pytest
 
-# Run with coverage:
-pytest --cov
+# Run just the two quick tests:
+python -m pytest tests/test_pawpal.py
 ```
 
 Sample test output:
 
 ```
-# Paste your pytest output here
+test_pawpal_system.py ...........                                        [ 84%]
+tests\test_pawpal.py ..                                                  [100%]
+
+13 passed in 0.09s
 ```
 
 ## 📐 Smarter Scheduling
