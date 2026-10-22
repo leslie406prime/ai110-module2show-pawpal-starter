@@ -4,13 +4,32 @@
 
 **a. Initial design**
 
-- Briefly describe your initial UML design.
-- What classes did you include, and what responsibilities did you assign to each?
+The initial design has four classes. Owner stores the owner's name, daily time
+budget, category preferences, and pets. Pet stores basic pet information and its
+care tasks. CareTask stores an activity's title, category, duration, priority,
+and completion status. Scheduler uses the owner's pets and pending tasks to
+build an ordered daily plan and explain selected and skipped tasks.
+
+The relationships are Owner has Pets, Pet has CareTasks, and Scheduler plans
+for an Owner. The Mermaid source is saved in diagrams/uml.mmd, and the matching
+Python dataclass skeletons are in pawpal_system.py.
 
 **b. Design changes**
 
-- Did your design change during implementation?
-- If yes, describe at least one change and why you made it.
+At the skeleton stage, the four classes and their relationships remain the same.
+The AI review identified shared mutable lists as a Python implementation risk,
+so each list uses dataclasses.field(default_factory=list). Scheduler's result
+lists also use init=False because they are generated output, not constructor
+inputs. Method bodies remain empty for the next implementation phase.
+
+The review also identified issues to revisit: task ownership must remain clear
+when displaying plans for multiple pets, and generate_plan must clear previous
+results so repeated runs do not accumulate tasks. The current one-way Pet-to-task
+relationship keeps the draft simple, but the UI may eventually need a pet lookup
+or explicit task-to-pet reference. Priority sorting will take O(n log n) time for
+n tasks, which is reasonable for a small household. A greedy selection may skip
+a long task while admitting shorter ones; this tradeoff will need implementation
+tests. These are design considerations, not verified scheduling behavior.
 
 ---
 
