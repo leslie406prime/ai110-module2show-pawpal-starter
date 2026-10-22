@@ -118,9 +118,13 @@ that would be difficult to verify from one printed schedule alone.
 
 **b. Confidence**
 
-The automated checks and CLI demo support the implemented daily planning rules.
+Confidence level: 4/5 stars for the documented daily planning rules. All 37 tests
+passed, including explicit acceptance checks for midnight sorting, correct-pet
+daily recurrence, three simultaneous tasks, and a pet with no tasks. Expected
+dates and times are written explicitly so tests do not simply repeat the algorithm.
 Duration-overlap detection, timezone-aware appointments, and automatic handling
-of twice-daily frequencies would need additional design and tests.
+of twice-daily frequencies would need additional design and tests. Passing the
+current suite does not imply these unimplemented features are supported.
 
 ---
 

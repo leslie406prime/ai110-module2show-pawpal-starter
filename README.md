@@ -96,22 +96,43 @@ Completed tasks: 1
 Pending tasks: 4
 ```
 
-## 🧪 Testing PawPal+
+## Testing PawPal+
+
+With the virtual environment active, run the full suite from the repository root:
 
 ```bash
-# Run the full test suite:
 python -m pytest
-
-# Run just the two quick tests:
-python -m pytest tests/test_pawpal.py
 ```
 
-Sample test output:
+Run the core acceptance tests alone with `python -m pytest tests/test_pawpal.py`.
+See [the test plan](tests/TEST_PLAN.md) for the five core behaviors and edge cases.
+The suite covers task addition/completion, chronological sorting, pet/status
+filtering, daily/weekly recurrence, duplicate-time warnings, multi-pet budget
+planning, input validation, and Streamlit session persistence. It checks empty
+pets, midnight and equal times, calendar boundaries, and duplicate prevention.
 
+Actual output from a successful `python -m pytest` run:
+
+```text
+============================= test session starts =============================
+platform win32 -- Python 3.13.14, pytest-9.1.1, pluggy-1.7.0
+rootdir: C:\Users\lesli\ai110-module2show-pawpal-starter
+plugins: anyio-4.15.1
+collected 37 items
+
+test_pawpal_system.py ...........                                        [ 29%]
+tests\test_algorithms.py ................                                [ 72%]
+tests\test_app.py ...                                                    [ 81%]
+tests\test_pawpal.py .......                                             [100%]
+
+============================= 37 passed in 5.53s ==============================
 ```
-................................                                         [100%]
-32 passed in 4.75s
-```
+
+**Confidence Level: 4/5 stars (★★★★☆)** for the documented behavior. Passing tests
+support the tested workflows, but do not prove every possible input works.
+Conflict detection checks exact starts rather than duration overlaps; timezone
+appointments, automatic twice-daily recurrence, and permanent storage remain
+outside scope. The suite explicitly records the duration-overlap limitation.
 
 ## Smarter Scheduling
 
