@@ -31,9 +31,23 @@ filters completed tasks, and selects activities by priority and preferences
 within one shared daily time budget. It also explains selected and skipped tasks.
 
 `main.py` demonstrates the system with two pets and readable terminal output.
-The tests cover basic task actions and multi-pet scheduling. Frequency is stored
-as descriptive text; automatic recurrence and the Streamlit backend integration
-are future work.
+The tests cover basic task actions, multi-pet scheduling, and Streamlit form
+interactions. Daily and weekly completion creates the next dated occurrence.
+
+`app.py` imports the backend classes and keeps one `Owner` in
+`st.session_state`. Pet and task forms call `Owner.add_pet()` and `Pet.add_task()`;
+the schedule uses `Scheduler` to plan across all pets. Data survives widget
+reruns within the session, but is not saved permanently across browser reloads
+or server restarts.
+
+Run the browser app with the virtual environment active:
+
+```bash
+python -m streamlit run app.py
+```
+
+Save owner details, add pets, select a pet when adding each task, and click
+**Generate schedule** to see the daily plan and its explanation.
 
 ## Getting started
 
@@ -57,28 +71,29 @@ pip install -r requirements.txt
 
 ## Sample Output
 
-Run the terminal demo with your virtual environment active:
-
-```bash
-python main.py
-```
-
-Actual output from the two-pet demo:
+Run `python main.py` with the virtual environment active. The demo uses a fixed
+2026-10-22 date for reproducible output:
 
 ```text
-Today's Schedule
-Owner: Jordan | Available time: 40 min
-Pets: Mochi (dog), Luna (cat)
+Today's Schedule (demo date: 2026-10-22)
+Owner: Jordan | Available time: 60 min
+08:00 | Mochi: Morning walk | 20 min | high priority
+08:00 | Luna: Breakfast | 5 min | high priority
+12:00 | Luna: Play session | 10 min | medium priority
+18:00 | Mochi: Brush coat | 15 min | low priority
+Total scheduled: 50 / 60 min
 
-1. Mochi: Morning walk | 20 min | high priority
-2. Luna: Breakfast | 5 min | high priority
-3. Luna: Play session | 10 min | medium priority
+Pending tasks for Mochi (sorted by time):
+- 08:00: Morning walk
+- 18:00: Brush coat
 
-Total scheduled: 35 / 40 min
-Time remaining: 5 min
+Conflict warnings:
+WARNING: Conflict on 2026-10-22 at 08:00: Mochi: Morning walk; Luna: Breakfast
 
-Skipped (not enough time):
-- Mochi: Brush coat | 15 min | low priority
+Completed: Mochi's Morning walk
+Next daily occurrence: 2026-10-23 at 08:00
+Completed tasks: 1
+Pending tasks: 4
 ```
 
 ## 🧪 Testing PawPal+
@@ -94,22 +109,32 @@ python -m pytest tests/test_pawpal.py
 Sample test output:
 
 ```
-test_pawpal_system.py ...........                                        [ 84%]
-tests\test_pawpal.py ..                                                  [100%]
-
-13 passed in 0.09s
+................................                                         [100%]
+32 passed in 4.75s
 ```
 
-## 📐 Smarter Scheduling
+## Smarter Scheduling
 
-> Fill in once you've implemented scheduling logic.
+| Feature | Method | Behavior |
+|---------|--------|----------|
+| Time sorting | `Scheduler.sort_by_time()` | Uses a lambda key on validated HH:MM strings; stable ties and untimed tasks last; returns a new list. |
+| Filtering | `Scheduler.filter_tasks()` | Combines optional case-insensitive pet name and completion status filters using `Owner.get_all_tasks()`. |
+| Daily planning | `Scheduler.generate_plan()` | Selects pending tasks due today or earlier by priority/preferences within the shared budget, then displays chosen tasks by time. |
+| Conflict detection | `Scheduler.detect_conflicts()` | Returns warnings for pending tasks with the same date and exact start time, across the same or different pets. |
+| Recurrence | `Scheduler.mark_task_complete()` | Completes once and attaches a fresh daily/weekly task to the same pet using `timedelta(days=1)` or `timedelta(days=7)`. |
 
-| Feature | Method(s) | Notes |
-|---------|-----------|-------|
-| Task sorting | | e.g., by priority, duration |
-| Filtering | | e.g., skip tasks if time runs out |
-| Conflict handling | | e.g., overlapping time slots |
-| Recurring tasks | | e.g., daily vs. weekly |
+Use `Scheduler.mark_task_complete(task)` for recurring workflows.
+`Task.mark_complete()` only changes the task's status. A repeated scheduler
+completion does not create duplicates. Late completion advances from today;
+early completion advances from the future due date. New instances preserve time,
+duration, priority, category, and frequency. Other frequencies, including twice
+daily, remain descriptive and do not generate new occurrences.
+
+Dates default to the server's local date. Optional `today` arguments make demos
+and tests reproducible. Conflict checks do not detect duration overlaps, resolve
+conflicts, or reject tasks. Pet name filters include all pets with that name.
+The browser form also accepts due dates/start times and supports recurring
+completion; conflict warnings appear alongside generated plans.
 
 ## 📸 Demo Walkthrough
 

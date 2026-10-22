@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from datetime import date, timedelta
+import re
 
 
 @dataclass
 class Task:
-    """One activity. Frequency is descriptive; recurrence is not automated."""
+    """One dated activity with an optional 24-hour HH:MM start time."""
 
     description: str
     category: str
@@ -15,6 +17,8 @@ class Task:
     priority: str = "medium"
     frequency: str = "daily"
     completed: bool = False
+    time: str | None = None
+    due_date: date = field(default_factory=date.today)
 
     def __post_init__(self) -> None:
         """Validate the task's details when it is created."""
@@ -27,14 +31,21 @@ class Task:
             raise ValueError("Frequency must not be blank.")
         if not isinstance(self.completed, bool):
             raise ValueError("Completion status must be a boolean.")
+        if self.time is not None and (
+            not isinstance(self.time, str)
+            or re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", self.time) is None
+        ):
+            raise ValueError("Time must use 24-hour HH:MM format, such as 09:30.")
+        if type(self.due_date) is not date:
+            raise ValueError("Due date must be a date.")
 
     def update_details(
         self, description: str, category: str, duration_minutes: int, priority: str
     ) -> None:
         """Validate and update this task's editable details."""
         # Validate a candidate first so a failed edit leaves this task unchanged.
-        candidate = Task(description, category, duration_minutes, priority,
-                         self.frequency, self.completed)
+        candidate = replace(self, description=description, category=category,
+                            duration_minutes=duration_minutes, priority=priority)
         self.description = candidate.description
         self.category = candidate.category
         self.duration_minutes = candidate.duration_minutes
@@ -114,13 +125,76 @@ class Scheduler:
     skipped_tasks: list[Task] = field(default_factory=list, init=False)
     _explanation: str = field(default="Generate a plan first.", init=False, repr=False)
 
-    def generate_plan(self) -> list[Task]:
+    def filter_tasks(
+        self, pet_name: str | None = None, completed: bool | None = None
+    ) -> list[Task]:
+        """Filter all owner tasks by case-insensitive pet name and/or status."""
+        tasks = self.owner.get_all_tasks()
+        if pet_name is not None:
+            matching_ids = {
+                id(task) for pet in self.owner.pets
+                if pet.name.casefold() == pet_name.strip().casefold()
+                for task in pet.tasks
+            }
+            tasks = [task for task in tasks if id(task) in matching_ids]
+        if completed is not None:
+            tasks = [task for task in tasks if task.completed == completed]
+        return tasks
+
+    def sort_by_time(self, tasks: list[Task] | None = None) -> list[Task]:
+        """Return tasks ordered by HH:MM, with untimed tasks last and stable ties."""
+        if tasks is None:
+            tasks = self.owner.get_all_tasks()
+        return sorted(tasks, key=lambda task: task.time or "24:00")
+
+    def mark_task_complete(self, task: Task, today: date | None = None) -> Task | None:
+        """Complete an owned task once and append its next daily/weekly occurrence."""
+        pet = next((pet for pet in self.owner.pets
+                    if any(existing is task for existing in pet.tasks)), None)
+        if pet is None:
+            raise ValueError("Task does not belong to this owner.")
+        if task.completed:
+            return None
+        intervals = {"daily": 1, "weekly": 7}
+        next_task = None
+        if task.frequency in intervals:
+            base_date = max(today or date.today(), task.due_date)
+            next_task = replace(
+                task, completed=False,
+                due_date=base_date + timedelta(days=intervals[task.frequency]),
+            )
+        task.mark_complete()
+        if next_task is not None:
+            pet.add_task(next_task)
+        return next_task
+
+    def detect_conflicts(self, tasks: list[Task] | None = None) -> list[str]:
+        """Warn about pending tasks with identical dates and start times across pets."""
+        if tasks is None:
+            tasks = self.owner.get_all_tasks()
+        pet_names = {id(task): pet.name for pet in self.owner.pets for task in pet.tasks}
+        groups: dict[tuple[date, str], list[Task]] = {}
+        for task in tasks:
+            if not task.completed and task.time is not None:
+                groups.setdefault((task.due_date, task.time), []).append(task)
+        warnings = []
+        for (due_date, start), group in sorted(groups.items()):
+            if len(group) > 1:
+                labels = "; ".join(
+                    f"{pet_names.get(id(task), 'Unknown pet')}: {task.description}"
+                    for task in group
+                )
+                warnings.append(f"Conflict on {due_date} at {start}: {labels}")
+        return warnings
+
+    def generate_plan(self, today: date | None = None) -> list[Task]:
         """Rebuild the plan using pending tasks, priority, preferences, and time."""
         _validate_minutes(self.owner.available_minutes)
+        today = today or date.today()
         tasks = self.owner.get_all_tasks()
         for task in tasks:
             task.__post_init__()
-        pending = [task for task in tasks if not task.completed]
+        pending = [task for task in tasks if not task.completed and task.due_date <= today]
         priority_order = {"high": 0, "medium": 1, "low": 2}
         preferences = set(self.owner.preferred_categories)
         pending.sort(key=lambda task: (
@@ -131,7 +205,8 @@ class Scheduler:
         remaining = self.owner.available_minutes
         reasons = [
             f"Daily time budget: {remaining} minutes. "
-            "Tasks ordered by priority, then preferred category, then entry order."
+            "Tasks selected by priority, then preferred category, then entry order; "
+            "displayed by start time."
         ]
         for task in pending:
             if task.duration_minutes <= remaining:
@@ -150,6 +225,8 @@ class Scheduler:
                 )
         if not pending:
             reasons.append("No pending tasks.")
+        self.selected_tasks[:] = self.sort_by_time(self.selected_tasks)
+        reasons.extend(self.detect_conflicts(self.selected_tasks))
         self._explanation = "\n".join(reasons)
         return list(self.selected_tasks)
 

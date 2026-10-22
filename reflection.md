@@ -39,8 +39,10 @@ separate from planning. The implementation now resets plan results on each run,
 filters completed tasks, and uses the owner's shared time budget. Tests cover
 multi-pet retrieval, priority and preference ordering, skipped tasks, completion,
 repeated runs, empty plans, input validation, and independent mutable lists.
-The CLI demo now labels tasks with their pet names. Automatic recurrence remains
-future work.
+The CLI demo now labels tasks with their pet names. In the algorithm phase, Task
+gained a due date and optional HH:MM start time. Scheduler gained sorting,
+filtering, exact-start conflict warnings, and an owner-aware completion method
+that creates the next daily or weekly occurrence for the same pet.
 
 ---
 
@@ -48,13 +50,26 @@ future work.
 
 **a. Constraints and priorities**
 
-- What constraints does your scheduler consider (for example: time, priority, preferences)?
-- How did you decide which constraints mattered most?
+The scheduler selects incomplete tasks due today or earlier within the owner's
+shared time budget. It chooses high priority before medium and low, uses preferred
+categories to break priority ties, and preserves entry order for remaining ties.
+Chosen tasks are displayed in start-time order, with untimed tasks last. This
+keeps urgent care central while making the resulting plan easy to read.
 
 **b. Tradeoffs**
 
-- Describe one tradeoff your scheduler makes.
-- Why is that tradeoff reasonable for this scenario?
+Conflict detection checks identical due dates and start times across all pets,
+rather than overlapping durations. This is easy to explain and groups tasks in
+O(n) time, but it misses a 30-minute walk at 08:00 overlapping feeding at 08:15.
+It returns warnings without rejecting tasks or automatically rescheduling them,
+so the owner decides how to resolve the conflict. The priority-based greedy
+selection also does not guarantee an optimal use of every available minute.
+
+The algorithm review considered a compact pairwise comprehension for conflicts.
+The implementation keeps an explicit grouping loop because it is easier to read
+and avoids comparing every task against every other task. For time sorting, a
+short lambda is clear: validated zero-padded HH:MM strings sort chronologically,
+and a 24:00 sentinel places untimed tasks last.
 
 ---
 
@@ -76,8 +91,11 @@ The initial AI design used CareTask and omitted frequency. That design was
 revised to Task with a description and frequency field to match the assignment.
 The suggestion to defer explicit pet labels was also revisited: the CLI now maps
 each scheduled task back to its pet so the output is understandable across pets.
-Automatic recurrence was deferred rather than adding unrequested date-handling
-complexity; the documentation states this limitation.
+Automatic recurrence was initially deferred, then implemented when requested.
+Daily and weekly tasks advance by one or seven days; other frequency labels
+remain descriptive. Recurrence is handled through Scheduler.mark_task_complete()
+so the next instance can be attached to the correct pet. Task.mark_complete()
+remains the low-level status change for callers that do not need recurrence.
 
 Verification used the actual main.py output, which showed tasks for both pets
 and a grooming task skipped when it could not fit the time budget. Automated
@@ -91,13 +109,18 @@ The README sample was copied from the successful demo run rather than invented.
 
 **a. What you tested**
 
-- What behaviors did you test?
-- Why were these tests important?
+Tests cover task completion and addition, all-pet access, ordering, combined
+pet/status filters, budget limits, repeated runs, invalid times, conflict warnings,
+and Streamlit session persistence. Recurrence tests check daily/weekly intervals,
+year and leap-day boundaries, early and late completions, correct pet assignment,
+and duplicate prevention. These checks protect the relationships and date logic
+that would be difficult to verify from one printed schedule alone.
 
 **b. Confidence**
 
-- How confident are you that your scheduler works correctly?
-- What edge cases would you test next if you had more time?
+The automated checks and CLI demo support the implemented daily planning rules.
+Duration-overlap detection, timezone-aware appointments, and automatic handling
+of twice-daily frequencies would need additional design and tests.
 
 ---
 

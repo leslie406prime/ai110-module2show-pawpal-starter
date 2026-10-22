@@ -24,6 +24,8 @@ classDiagram
         +str priority
         +str frequency
         +bool completed
+        +str time
+        +date due_date
         +update_details(str description, str category, int duration_minutes, str priority) None
         +mark_complete() None
     }
@@ -31,7 +33,11 @@ classDiagram
         +Owner owner
         +list~Task~ selected_tasks
         +list~Task~ skipped_tasks
-        +generate_plan() list~Task~
+        +generate_plan(date today) list~Task~
+        +sort_by_time(list~Task~ tasks) list~Task~
+        +filter_tasks(str pet_name, bool completed) list~Task~
+        +mark_task_complete(Task task, date today) Task
+        +detect_conflicts(list~Task~ tasks) list~str~
         +get_total_duration() int
         +explain_plan() str
     }
