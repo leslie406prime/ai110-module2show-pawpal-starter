@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from datetime import date, timedelta
+import pytest
 
 from streamlit.testing.v1 import AppTest
 
@@ -9,6 +10,12 @@ from pawpal_system import Owner, Pet, Task
 
 
 APP = str(Path(__file__).resolve().parents[1] / "app.py")
+
+
+@pytest.fixture(autouse=True)
+def isolated_data_file(tmp_path, monkeypatch):
+    """Keep UI persistence tests independent of real user data and each other."""
+    monkeypatch.setenv("PAWPAL_DATA_PATH", str(tmp_path / "data.json"))
 
 
 def test_pet_and_task_persist_across_reruns_and_schedule_all_pets():
@@ -85,3 +92,36 @@ def test_ui_completion_creates_one_next_occurrence():
     assert owner.pets[0].tasks[1].due_date == date.today() + timedelta(days=1)
     app.run()
     assert len(owner.get_all_tasks()) == 2
+
+
+def test_ui_filters_sorting_and_conflict_guidance():
+    app = AppTest.from_file(APP, default_timeout=30)
+    late = Task("Evening walk", "exercise", 20, time="18:00")
+    early = Task("Breakfast", "feeding", 5, time="08:00")
+    done = Task("Medicine", "health", 5, completed=True, time="07:00")
+    cat_task = Task("Cat breakfast", "feeding", 5, time="08:00")
+    app.session_state["owner"] = Owner("Jordan", 60, pets=[
+        Pet("Mochi", "dog", [late, early, done]), Pet("Luna", "cat", [cat_task])
+    ])
+    app.run()
+    assert list(app.table[1].value["Time"]) == ["07:00", "08:00", "08:00", "18:00"]
+    app.selectbox(key="filter_pet").select("Mochi")
+    app.selectbox(key="filter_status").select("Pending").run()
+    assert list(app.table[1].value["Task"]) == ["Breakfast", "Evening walk"]
+    assert "Luna: Cat breakfast" in app.warning[0].value
+    assert "Arrange separate start times" in app.warning[0].value
+    app.button(key="generate_schedule").click().run()
+    assert set(app.table[-1].value["Pet"]) == {"Mochi", "Luna"}
+    assert app.success
+    assert not app.exception
+
+
+def test_ui_restores_saved_data_in_new_session_and_finds_slot():
+    app = AppTest.from_file(APP, default_timeout=30).run()
+    app.text_input(key="pet_name").input("Mochi")
+    app.button(key="add_pet").click().run()
+    restored_app = AppTest.from_file(APP, default_timeout=30).run()
+    assert restored_app.session_state["owner"].pets[0].name == "Mochi"
+    restored_app.button(key="find_slot").click().run()
+    assert any("Next available slot: 08:00" in message.value for message in restored_app.success)
+    assert not restored_app.exception

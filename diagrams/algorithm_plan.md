@@ -19,6 +19,15 @@ Small improvements:
 5. Keep priority-based budget selection, then display chosen tasks in time
    order. Exclude future occurrences until their due date.
 
+The stretch requirement supersedes step 5's display rule: both selection and
+display now use priority first, then time within each priority. Preferences break
+ties after time. Chronological task browsing remains a separate view.
+
+Additional algorithm: sort occupied intervals for a chosen date, then advance a
+candidate start through the intervals until the requested duration fits. The
+candidate skips overlapping intervals across pets, remains within a same-day
+window, and never changes existing tasks. O(n log n) sorting dominates the scan.
+
 Readability review: a grouped dictionary is easier to follow than a nested
 pairwise comprehension and takes O(n) grouping time. Sorting warning groups
 gives deterministic output. Exact start matches are deliberately simpler than

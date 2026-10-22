@@ -1,13 +1,18 @@
 classDiagram
+    %% Optional arguments use Python defaults; None is a valid return for completion.
     class Owner {
         +str name
         +int available_minutes
         +list~str~ preferred_categories
         +list~Pet~ pets
+        +__post_init__() None
         +add_pet(Pet pet) None
         +get_all_tasks() list~Task~
         +set_available_time(int minutes) None
         +set_preferences(list~str~ categories) None
+        +save_to_json(Path path) None
+        +load_from_json(Path path) Owner$
+        -_from_payload(dict payload) Owner$
     }
     class Pet {
         +str name
@@ -24,8 +29,9 @@ classDiagram
         +str priority
         +str frequency
         +bool completed
-        +str time
+        +Optional~str~ time
         +date due_date
+        +__post_init__() None
         +update_details(str description, str category, int duration_minutes, str priority) None
         +mark_complete() None
     }
@@ -33,16 +39,20 @@ classDiagram
         +Owner owner
         +list~Task~ selected_tasks
         +list~Task~ skipped_tasks
-        +generate_plan(date today) list~Task~
-        +sort_by_time(list~Task~ tasks) list~Task~
-        +filter_tasks(str pet_name, bool completed) list~Task~
-        +mark_task_complete(Task task, date today) Task
-        +detect_conflicts(list~Task~ tasks) list~str~
+        -str _explanation
+        +generate_plan(Optional~date~ today) list~Task~
+        +sort_by_time(Optional~list~ tasks) list~Task~
+        +sort_by_priority(Optional~list~ tasks) list~Task~
+        +next_available_slot(int duration_minutes, Optional~date~ on_date, str start, str end) Optional~str~
+        +filter_tasks(Optional~str~ pet_name, Optional~bool~ completed) list~Task~
+        +mark_task_complete(Task task, Optional~date~ today) Optional~Task~
+        +detect_conflicts(Optional~list~ tasks) list~str~
         +get_total_duration() int
         +explain_plan() str
     }
 
     Owner "1" --> "0..*" Pet : cares for
     Pet "1" --> "0..*" Task : has
-    Scheduler "0..*" --> "1" Owner : plans for
-    Scheduler --> Task : selects and orders
+    Scheduler "0..*" --> "1" Owner : retrieves via get_all_tasks
+    Scheduler --> Task : sorts filters selects and completes
+    Scheduler ..> Pet : appends recurring task to matching pet

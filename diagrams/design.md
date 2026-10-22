@@ -13,7 +13,7 @@ This draft uses four classes inferred from the starter app requirements.
 
 - Plan for one day using the owner's available minutes across all their pets.
 - Consider incomplete tasks due today or earlier only. Each task belongs to one pet.
-- Select high-priority tasks first, then medium, then low. Within the same priority, prefer the owner's preferred categories; preserve entry order for remaining ties.
+- Select high-priority tasks first, then medium, then low. Within the same priority, sort by start time, then preferred category, then entry order. Untimed tasks follow timed tasks.
 - Add a task if its entire duration fits in the remaining time. Otherwise, record it as skipped and continue considering other tasks.
 - Require positive task durations and nonnegative available time. Priority must be `low`, `medium`, or `high`.
 - Return an ordered task list and explain choices using priority, preferences, and remaining time. Tasks have optional HH:MM start times and due dates. Scheduler.sort_by_time() orders chosen tasks; detect_conflicts() warns about identical date/start times. Scheduler.mark_task_complete() creates the next daily/weekly occurrence for the same pet.
@@ -22,3 +22,10 @@ This draft uses four classes inferred from the starter app requirements.
 ## Mermaid UML
 
 The class diagram is in [uml.mmd](uml.mmd). The matching classes are implemented in `pawpal_system.py`. Scheduler retrieves tasks through `Owner.get_all_tasks()`, then filters completed tasks and applies the shared time budget.
+
+## Stretch extensions
+
+Owner saves and restores its object graph with versioned JSON, ISO dates, and
+atomic file replacement. Scheduler.next_available_slot() scans occupied intervals
+across all pets to suggest the earliest duration-sized gap without moving tasks.
+The final architecture is also recorded in [uml_final.mmd](uml_final.mmd).

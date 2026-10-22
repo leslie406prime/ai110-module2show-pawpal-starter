@@ -92,7 +92,7 @@ def test_conflicts_across_pets_ignore_completed_and_different_dates():
     assert scheduler.detect_conflicts() == []
 
 
-def test_priority_selection_then_chronological_display():
+def test_priority_selection_then_time_within_priority():
     late = make_task("Late high", "18:00")
     late.priority = "high"
     early = make_task("Early low", "08:00")
@@ -101,7 +101,7 @@ def test_priority_selection_then_chronological_display():
     scheduler.owner.set_available_time(5)
     assert scheduler.generate_plan(today=TODAY) == [late]
     scheduler.owner.set_available_time(10)
-    assert scheduler.generate_plan(today=TODAY) == [early, late]
+    assert scheduler.generate_plan(today=TODAY) == [late, early]
 
 
 @pytest.mark.parametrize("base, expected", [

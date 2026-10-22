@@ -20,6 +20,12 @@ dates, rather than reproducing the implementation's sorting or date arithmetic.
 assignment. Explicit assertions check both the completed record and its successor.
 No network service is required for these tests.
 
+Stretch tests in `tests/test_extensions.py` cover priority-then-time ordering,
+the earliest duration-sized gap across pets (overlaps, exact boundaries, no room,
+completed/untimed tasks), JSON round trips with recurring history, missing/corrupt
+files, schema validation, and failed atomic saves. UI tests isolate their data
+files in temporary directories and verify a fresh session restores saved pets.
+
 Run all checks from the repository root with the virtual environment active:
 
 ```bash
@@ -28,5 +34,6 @@ python -m pytest
 
 Confidence target: 4/5 for the documented rules, not a claim that all possible
 inputs or production workflows are covered. Duration overlaps, timezone-aware
-appointments, automatic twice-daily recurrence, and permanent storage remain
-outside the implemented behavior.
+appointments and automatic twice-daily recurrence remain outside the implemented
+behavior. JSON persistence is local and single-user; concurrent writer coordination
+is not covered or supported.

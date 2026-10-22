@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import date, timedelta
+import json
+from pathlib import Path
 import re
+import tempfile
 
 
 @dataclass
@@ -115,6 +118,68 @@ class Owner:
         """Set preferred care categories."""
         self.preferred_categories = list(categories)
 
+    def save_to_json(self, path: str | Path = "data.json") -> None:
+        """Atomically save this owner's pets/tasks as versioned JSON with ISO dates."""
+        payload = {"version": 1, "owner": asdict(self)}
+        for pet in payload["owner"]["pets"]:
+            for task in pet["tasks"]:
+                task["due_date"] = task["due_date"].isoformat()
+        # Validate the serialized shape before replacing an existing good file.
+        self._from_payload(payload)
+        destination = Path(path)
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=destination.parent,
+                prefix=destination.name + ".", suffix=".tmp", delete=False,
+            ) as handle:
+                temporary = Path(handle.name)
+                json.dump(payload, handle, indent=2, ensure_ascii=False)
+                handle.write("\n")
+            temporary.replace(destination)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+
+    @classmethod
+    def load_from_json(cls, path: str | Path = "data.json") -> Owner:
+        """Rebuild validated dataclasses from JSON; missing or invalid files raise errors."""
+        with Path(path).open(encoding="utf-8") as handle:
+            return cls._from_payload(json.load(handle))
+
+    @classmethod
+    def _from_payload(cls, payload: dict) -> Owner:
+        """Validate the storage schema and reconstruct dates and object relationships."""
+        try:
+            if type(payload["version"]) is not int or payload["version"] != 1:
+                raise ValueError("Unsupported data version.")
+            raw = payload["owner"]
+            for key in ("name",):
+                if not isinstance(raw[key], str) or not raw[key].strip():
+                    raise ValueError("Invalid owner name.")
+            if not isinstance(raw["preferred_categories"], list) or not all(
+                isinstance(category, str) for category in raw["preferred_categories"]
+            ):
+                raise ValueError("Invalid preferences.")
+            if not isinstance(raw["pets"], list):
+                raise ValueError("Invalid pets.")
+            owner = cls(raw["name"], raw["available_minutes"], raw["preferred_categories"])
+            for raw_pet in raw["pets"]:
+                if not all(isinstance(raw_pet[key], str) and raw_pet[key].strip()
+                           for key in ("name", "species")):
+                    raise ValueError("Invalid pet details.")
+                if not isinstance(raw_pet["tasks"], list):
+                    raise ValueError("Invalid tasks.")
+                pet = Pet(raw_pet["name"], raw_pet["species"])
+                for raw_task in raw_pet["tasks"]:
+                    details = dict(raw_task)
+                    details["due_date"] = date.fromisoformat(details["due_date"])
+                    pet.add_task(Task(**details))
+                owner.add_pet(pet)
+            return owner
+        except (KeyError, TypeError, AttributeError, ValueError) as error:
+            raise ValueError(f"Invalid PawPal data: {error}") from error
+
 
 @dataclass
 class Scheduler:
@@ -146,6 +211,44 @@ class Scheduler:
         if tasks is None:
             tasks = self.owner.get_all_tasks()
         return sorted(tasks, key=lambda task: task.time or "24:00")
+
+    def sort_by_priority(self, tasks: list[Task] | None = None) -> list[Task]:
+        """Sort high/medium/low first, then HH:MM, then preferences and entry order."""
+        if tasks is None:
+            tasks = self.owner.get_all_tasks()
+        ranks = {"high": 0, "medium": 1, "low": 2}
+        preferences = set(self.owner.preferred_categories)
+        return sorted(tasks, key=lambda task: (
+            ranks[task.priority], task.time or "24:00", task.category not in preferences
+        ))
+
+    def next_available_slot(
+        self, duration_minutes: int, on_date: date | None = None,
+        start: str = "08:00", end: str = "20:00",
+    ) -> str | None:
+        """Find the earliest duration-sized gap across all pets within a day's window."""
+        _validate_minutes(duration_minutes, minimum=1)
+        window_start, window_end = _time_minutes(start), _time_minutes(end)
+        if window_start >= window_end:
+            raise ValueError("Window end must be after its start on the same day.")
+        on_date = on_date or date.today()
+        busy = sorted(
+            (_time_minutes(task.time), _time_minutes(task.time) + task.duration_minutes)
+            for task in self.owner.get_all_tasks()
+            if not task.completed and task.time is not None and task.due_date == on_date
+        )
+        candidate = window_start
+        for busy_start, busy_end in busy:
+            if busy_end <= candidate:
+                continue
+            if candidate + duration_minutes <= min(busy_start, window_end):
+                return f"{candidate // 60:02d}:{candidate % 60:02d}"
+            candidate = max(candidate, busy_end)
+            if candidate + duration_minutes > window_end:
+                return None
+        if candidate + duration_minutes <= window_end:
+            return f"{candidate // 60:02d}:{candidate % 60:02d}"
+        return None
 
     def mark_task_complete(self, task: Task, today: date | None = None) -> Task | None:
         """Complete an owned task once and append its next daily/weekly occurrence."""
@@ -195,18 +298,14 @@ class Scheduler:
         for task in tasks:
             task.__post_init__()
         pending = [task for task in tasks if not task.completed and task.due_date <= today]
-        priority_order = {"high": 0, "medium": 1, "low": 2}
+        pending = self.sort_by_priority(pending)
         preferences = set(self.owner.preferred_categories)
-        pending.sort(key=lambda task: (
-            priority_order[task.priority], task.category not in preferences
-        ))
         self.selected_tasks.clear()
         self.skipped_tasks.clear()
         remaining = self.owner.available_minutes
         reasons = [
             f"Daily time budget: {remaining} minutes. "
-            "Tasks selected by priority, then preferred category, then entry order; "
-            "displayed by start time."
+            "Tasks ordered by priority, then start time, preferred category, and entry order."
         ]
         for task in pending:
             if task.duration_minutes <= remaining:
@@ -225,7 +324,6 @@ class Scheduler:
                 )
         if not pending:
             reasons.append("No pending tasks.")
-        self.selected_tasks[:] = self.sort_by_time(self.selected_tasks)
         reasons.extend(self.detect_conflicts(self.selected_tasks))
         self._explanation = "\n".join(reasons)
         return list(self.selected_tasks)
@@ -243,3 +341,11 @@ def _validate_minutes(minutes: int, minimum: int = 0) -> None:
     """Reject fractional, boolean, and out-of-range minute values."""
     if type(minutes) is not int or minutes < minimum:
         raise ValueError(f"Minutes must be an integer of at least {minimum}.")
+
+
+def _time_minutes(value: str) -> int:
+    """Validate a zero-padded 24-hour time and convert it to minutes after midnight."""
+    if not isinstance(value, str) or re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value) is None:
+        raise ValueError("Time must use 24-hour HH:MM format.")
+    hours, minutes = map(int, value.split(":"))
+    return hours * 60 + minutes
